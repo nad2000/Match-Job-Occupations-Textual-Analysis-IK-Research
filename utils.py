@@ -3,7 +3,6 @@
 
 import dill
 import nltk
-from stem import IndonesianStemmer
 import string
 import os
 import re
@@ -15,23 +14,24 @@ import csv
 import string
 import sklearn
 from sklearn.feature_extraction.text import TfidfVectorizer
-from id_stopwords import stopwords
 import math
 from itertools import groupby
 
+stopwords = nltk.corpus.stopwords.words('english')
+stemmer = nltk.stem.snowball.SnowballStemmer("english")
+# Include digits since it is important
+# for product distinciont (eg a model number or version number):
+tokenizer = nltk.tokenize.RegexpTokenizer("[\w'0-9]+[+]*|\$[\d\.]+|\S+", flags=re.UNICODE)
+
 # Location of category product similarity files:
 data_dir = "/data/python-scrapy-data-mining/"
-
-stemmer = IndonesianStemmer()
-# Include digits since it is important for product distinciont (eg a model number or version number):
-tokenizer = nltk.tokenize.RegexpTokenizer("[\w'0-9]+|\$[\d\.]+|\S+", flags=re.UNICODE)
 
 categories = category_products = category_rows = prod_ids = None
 
 def backup_object(obj, file_name=None):
     if file_name is None:
         file_name = "{0}.pkl".format(id(obj))
-        print "*** Object stored in:", file_name
+        print("*** Object stored in:", file_name)
     with open(file_name, "wb") as bf:
         dill.dump(obj, bf)
 

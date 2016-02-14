@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # vim: ai ts=4 sts=4 et sw=4 ft=python
 
@@ -12,6 +12,7 @@ from random import shuffle
 from collections import namedtuple
 import codecs
 import multiprocessing
+import csv
 
 
 import nltk
@@ -19,60 +20,60 @@ import sklearn
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import DBSCAN
 
-
-# adjust this path to point to 'site-aggregation'
-sys.path.append(os.path.join(os.environ["HOME"], "site-aggregation"))
-
-import crawler.settings
-# set MySQL DB root user password here or in site-aggregation private settings:
-crawler.settings.MYSQL_PASSWORD = os.environ.get("MYSQL_PWD", crawler.settings.MYSQL_PASSWORD)
-
-from crawler import db
-from crawler.db import Product
-
 import utils
-from id_stopwords import stopwords
-
+from utils import tokenizer, stopwords, stemmer
 
 # largest distance between points for clustering:
 eps = 0.1
-include_title = True
+include_title = False
 include_description = True
 
+# TODO:
+title_weight = 0.5
+description_weight = 1 - title_weight
 
-#list(Product.select(Product.title, Product.url).limit(10))
-db.mysql_db.connect()
 
-CsvRow = namedtuple('CsvRow', 'id, title, url')
-def ilines(
-        file_name=None,
-        include_description=include_description):
+def tokenize_and_stem(text):
+    """
+    Tokenize and stem English text
+    """
+    global stemmer, tokenizer
+    return [stemmer.stem(token) for token in tokenizer.tokenize(text)]
+
+
+def ilines(file1_name, file2_name, titles=False):
     """
     File line iterator
     """
-    global categories, prod_ids, category_rows
-    prod_ids = []
-    category_rows = defaultdict(lambda: [])
+    global jo_ids, last_occ_row
+    # Line no -> code
+    jo_ids = [None]
+    
+    with open(file1_name, mode='r') with fileobj:
+        rdr = csv.reader(fileobj)
 
-    for i, row in enumerate(
-            Product.select(
-                Product.id,
-                Product.title,
-                Product.description,
-                Product.url)
-            .where(Product.url % "https://www.bukalapak.com/p/%") if file_name is None
-            else (CsvRow(*l) for l in utils.unicode_csv_reader(file_name)) ):
-        prod_ids.append(row.id)
-        category = '/'.join(row.url.split('/')[4:-1])
-        category_rows[category].append(i)
-        res = row.title
-        if file_name is None and include_description and row.description:
-            res += (' ' + row.description)
-        yield res
+        for i, row in enumerate(rdr):
+            if i == 0: ## skip header
+                continue
+            # industry, occ_code, occ_name, occ_descriptions
+            # sample_job_titles, task1, task2, task3, task4, task5
+            jo_ids.append(row[1])
+            # include industry, occ_name, occ_descriptions
+            # task1, task2, task3, task4, task5
+            res = row[0] + ' ' + row[2] + ' ' + row[3] + ' ' + ' '.join(row[5:]
+            yield res
+        last_occ_row = i # row #0 is the header row
 
-        categories = sorted(category_rows.keys())
+    with open(file2_name, mode='r') with fileobj:
+        rdr = csv.reader(fileobj)
 
-    return
+        for i, row in enumerate(rdr):
+            jo_ids.append(i)
+            # include industry, occ_name, occ_descriptions
+            # task1, task2, task3, task4, task5
+            res = row[1]
+            yield res
+                                                                        
 
 #define vectorizer parameters
 tfidf_vectorizer = TfidfVectorizer(
@@ -82,11 +83,10 @@ tfidf_vectorizer = TfidfVectorizer(
     #min_df=0.01,
     stop_words=stopwords,
     use_idf=True,
-    tokenizer=utils.tokenize_and_stem_ID,
+    tokenizer=utils.tokenize_and_stem,
     ngram_range=(1,1))
 
 
-db.mysql_db.connect()
 tfidf_matrix = tfidf_vectorizer.fit_transform(ilines())
 print "*** Vector space shape:", tfidf_matrix.shape
 
