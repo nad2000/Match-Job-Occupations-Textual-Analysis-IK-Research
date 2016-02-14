@@ -1,7 +1,5 @@
 # Python Script to Match Job Occupations (Textual Analysis)
 
-[TOC]
-
 ## Installaion 
 
  1. install pip: `sudo apt-get install python-pip python-dev build-essential; sudo pip install --upgrade pip`
@@ -23,7 +21,3 @@ We have two files. Both have job occupations. Here the descriptions of the files
  - **File 2**: It always has the following fields: industry, occupation code, occupation name, occupation description, sample of job titles, and the five most important tasks in that job.
 
 Your job if to write a python script that picks a job occupation from File 1 and finds the best match in File 2. The script should also a score on how good the job match is. Samples of the two files are attached to this job post.
-
-When you apply for the job, you have to describe how you plan on tackling this problem. The job is posted for $150, but you can make higher bids, specially you have clever ways on making this matching very good.
-
-
