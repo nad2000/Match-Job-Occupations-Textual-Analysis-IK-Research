@@ -1,30 +1,31 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # vim: ai ts=4 sts=4 et sw=4 ft=python
+# coding: utf-8
 
-##%matplotlib inline
-
-import os
-import sys
-from collections import defaultdict
-from itertools import groupby
-from random import shuffle
-from collections import namedtuple
-import codecs
 import multiprocessing
 import csv
 
-
 import nltk
-import sklearn
+from nltk.tokenize import RegexpTokenizer
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.cluster import DBSCAN
 
+import re
 import utils
 from utils import tokenizer, stopwords, stemmer
 
+from scipy.spatial.distance import cosine
+from importlib import reload
+from sklearn.metrics.pairwise import cosine_similarity
+
+
+tokenizer = RegexpTokenizer("[a-zA-Z]+[\w']+[+]*")
+
 # largest distance between points for clustering:
 eps = 0.1
+min_sine_sim = 0.1
+ngram_range = (1, 1)
+
 include_title = False
 include_description = True
 
@@ -44,12 +45,15 @@ def tokenize_and_stem(text):
 def ilines(file1_name, file2_name, titles=False):
     """
     File line iterator
+    Yields "raw" documents
     """
-    global jo_ids, last_occ_row
+    global jo_ids, last_target_row, first_source_row
+
     # Line no -> code
-    jo_ids = [None]
+    jo_ids = []
     
-    with open(file1_name, mode='r') with fileobj:
+    # TARGET:
+    with open(file2_name, mode='r') as fileobj:
         rdr = csv.reader(fileobj)
 
         for i, row in enumerate(rdr):
@@ -60,20 +64,21 @@ def ilines(file1_name, file2_name, titles=False):
             jo_ids.append(row[1])
             # include industry, occ_name, occ_descriptions
             # task1, task2, task3, task4, task5
-            res = row[0] + ' ' + row[2] + ' ' + row[3] + ' ' + ' '.join(row[5:]
+            #res = row[0] + ' ' + row[2] + ' ' + row[3] + ' ' + ' '.join(row[5:])
+            res = row[3]
             yield res
-        last_occ_row = i # row #0 is the header row
+        last_target_row = i-1 # row #0 is the header row
+        first_source_row = i # row #0 is the header row
 
-    with open(file2_name, mode='r') with fileobj:
+    # SOURCE:
+    with open(file1_name, mode='r') as fileobj:
         rdr = csv.reader(fileobj)
 
         for i, row in enumerate(rdr):
             jo_ids.append(i)
-            # include industry, occ_name, occ_descriptions
-            # task1, task2, task3, task4, task5
             res = row[1]
             yield res
-                                                                        
+
 
 #define vectorizer parameters
 tfidf_vectorizer = TfidfVectorizer(
@@ -81,46 +86,33 @@ tfidf_vectorizer = TfidfVectorizer(
     #max_df=1.1,
     #max_features=200000,
     #min_df=0.01,
+    lowercase=True,
+    analyzer='word',
     stop_words=stopwords,
     use_idf=True,
-    tokenizer=utils.tokenize_and_stem,
-    ngram_range=(1,1))
+    tokenizer=tokenize_and_stem,
+    ngram_range=ngram_range)
 
 
-tfidf_matrix = tfidf_vectorizer.fit_transform(ilines())
-print "*** Vector space shape:", tfidf_matrix.shape
-
-def get_clusters(category, eps=eps):
-    """
-    Runs clustering and returns labeled non-distinct product entires
-    grouped by lables in a dictionary.
-    """
-    global tfidf_matrix, category_rows, row_nos
-
-    row_nos = category_rows[category]
-
-    # create and fit the model:
-    db = DBSCAN(eps=eps).fit(tfidf_matrix[row_nos])
-    return [
-        (label, [p for _, p in prodi]) for label, prodi in groupby(
-                ((l, prod_ids[row_nos[i]]) for i, l in sorted(enumerate(db.labels_), key=lambda e: -e[1]) if l != -1),
-                key=lambda e: e[0]
-        )
-    ]
+tfidf_matrix = tfidf_vectorizer.fit_transform(ilines("data/File 1.csv", "data/File 2.csv"))
+print("*** Vector space shape:", tfidf_matrix.shape)
 
 
-def category_clusters(categories):
-    return [(c, get_clusters(c)) for c in categories]
+similarity = cosine_similarity(tfidf_matrix[first_source_row:,:], tfidf_matrix[:first_source_row,:])
+print("*** Smilarity matrix shape:", similarity.shape)
 
-shuffle(categories)
 
-process_num = multiprocessing.cpu_count()
-pool = multiprocessing.Pool(processes=process_num)
-clusters = pool.map(category_clusters, utils.chunks(categories, process_num))
+def take_top10(row):
+    return sorted([r for r in zip(range(row.size), row.tolist()) if r[1] > min_sine_sim],
+           key=lambda r: -r[1])[:10]
 
-clusters = filter(lambda c: c[1], sum(clusters, []))
 
-for c, labels in clusters:
-    for l, products in labels:
-        print "\"{0}\", {1}: {2}".format(c, l, ','.join(map(str, products)))
+top10 = []
+for row in similarity:
+    top10.append(take_top10(row))
+
+for i, l in enumerate(top10, 1):
+    if l != []:
+        print("{}: ".format(i),  end="")
+        print(", ".join(( "{} ({:.2f})".format(k+2, score) for (k, score) in l)))
 

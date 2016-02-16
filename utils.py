@@ -21,7 +21,8 @@ stopwords = nltk.corpus.stopwords.words('english')
 stemmer = nltk.stem.snowball.SnowballStemmer("english")
 # Include digits since it is important
 # for product distinciont (eg a model number or version number):
-tokenizer = nltk.tokenize.RegexpTokenizer("[\w'0-9]+[+]*|\$[\d\.]+|\S+", flags=re.UNICODE)
+## "[\w'0-9]+[+]*|\$[\d\.]+|\S+"
+tokenizer = nltk.tokenize.RegexpTokenizer("[\w'0-9]+[+]*", flags=re.UNICODE)
 
 # Location of category product similarity files:
 data_dir = "/data/python-scrapy-data-mining/"
